@@ -1,9 +1,21 @@
+import os
+import filetype
 
 
-def time_to_frame(time_s : int, total_duration : float, n_frames : int) -> int :
+
+def is_file_wav(path : str) -> bool :
     """
-        TODO
+        ## is_file_wav
+
+        ### params :
+            path : path to check of the file is a wav file or not
+        ### return :
+            True if the file is a .wav file, False instead
     """
 
-    return int((time_s * n_frames) / total_duration)
-# def time_to_frame(time_s : int, frame_rate : int, nframes : int) -> int
+    if not os.path.exists(path) or not os.path.isfile(path) :
+        return False
+        
+    kind = filetype.guess(path)
+    return kind is not None and kind.extension == "wav"
+# def is_file_wav(path : str) -> bool 

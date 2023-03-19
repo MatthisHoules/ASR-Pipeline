@@ -1,5 +1,8 @@
-filetype==1.2.0
-transformers
+filetype
+numpy
 librosa
 pandas
-numpy
+matplotlib
+soundfile
+transformers
+torch

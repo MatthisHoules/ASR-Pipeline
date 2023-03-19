@@ -1,67 +1,37 @@
 # External Imports
-import sys
-import numpy as np
 import pandas as pd
-import time
+import sys
 
 # Internal Imports
-from src.transcription.Transcription import Transcription
-from src.audio.Wav import Wav
+from src.pipeline import Pipeline
+from src.transcription import Transcription
 
 
-FILENAME : str = "./tests/AC.wav"
-
-# FILENAME : str = "./tests/sardoche_angry.wav"
 
 def __main__() -> None : 
     """
-        Main Function
+        ## __main__
+
+        Main function
+
+        ### return :
+            None
     """
+    input_wav_files_path : str = sys.argv[1]
+    output_csv_path : str = sys.argv[2]
 
-    transcription = Transcription("bofenghuang/asr-wav2vec2-ctc-french")
-
-    wav_file : Wav = Wav(FILENAME)
-
-    strip_duration_s : float = 5
-    block_duration_s : float = 60
-
-    waveform : np.array = wav_file.get_waveform(
-        block_length_s=block_duration_s,
-        stripe_length_s=strip_duration_s,
-        mono=True,
-        sr=16_000
+    pipeline : Pipeline = Pipeline(
+        transcription_model_name="bofenghuang/asr-wav2vec2-ctc-french"
     )
 
-    a, e = transcription.process_striped_block_waveform(
-        waveform,
-        16_000,
-        strip_duration_s
+    pipeline.transcript_batch(
+        input_wav_files_path,
+        save_sppas=True,
+        save_sppas_path = output_csv_path
     )
-
-    print(a)
-    print()
-    print(e)
-
-    # transcription.display_words(FILENAME, e)
-
-    df : pd.DataFrame = pd.DataFrame(e)
-    df.to_csv("./tests/ac_part_no_lm.csv", index=None)
-    # for c in t :
-    #     print("Memory size : ", sys.getsizeof(c))
+# def __main__() -> None 
 
 
-    # print(t)
-    # a = 0
-    # for c in t :
-    #     a += c["block_length"]
-    # #     print()
 
-    # print("Block length : ", a)
-# # def __main__()
-
-
-    
 if __name__ == "__main__" :
-    baseT = time.time()
     __main__()
-    print("all process duration : ", time.time() - baseT, "seconds")

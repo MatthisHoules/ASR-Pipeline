@@ -1,71 +1,90 @@
-# External Imports
+# Exteral Imports
 import os
 import filetype
-import wave
+
 import numpy as np
+import pandas as pd
+
 import librosa
+import wave
 
 # Internal Imports
-from .utils import time_to_frame
+from . import plot_waveform_with_ipus
 
 
 
-class Wav :
+class Wav(object) :
     """
-        TODO
+        # Wav
+
+        This class allows to load .wav file and extract its waveform.
+        The waveform extraction method waveform (Wav.get_waveform) have a lot of parameter for waveform transformation. Please see its documentation
+        A method (Wav.get_IPUs) segments the waveform in differents IPUs (Inter Pausal Units)
     """
 
-    def __init__(self, wav_filepath : str) :
-        """
-            TODO
-        """
-        self.filepath : str = wav_filepath
-        self.wav_params = self.__retreive_wav_params()
-
-        self.__assert_wav_file()
-    # def __init__(self, wav_filepath : str)
 
 
-    def __retreive_wav_params(self) : 
+    def __init__(self, filepath : str) :
         """
-            TODO
+            ## __init__
+
+            Wav class constructor
+
+            ### Params : 
+                filepath : str - path of the .wav file to load.
         """
 
-        wavefile = wave.open(self.filepath, 'r')
-        return wavefile.getparams()
-    # def __retreive_wav_params(self)
-
-
-
-    def __assert_wav_file(self) :
+        self.filepath : str = filepath
         """
-            TODO
+            ### filepath
+                str
+
+            Path of the .wav file
         """
 
         assert os.path.exists(self.filepath) and os.path.isfile(self.filepath)
         kind = filetype.guess(self.filepath)
         assert kind is not None and kind.extension == "wav"
 
-        self.filepath : str = self.filepath
+        # Retrieve wav_params
+        with wave.open(self.filepath, 'r') as wavefile :
+            self.wav_params = wavefile.getparams()
+            """
+                ### wav_params
+                    _wave_params
 
-        wavefile = wave.open(self.filepath, 'r')
-        wav_params = wavefile.getparams()
-        wavefile.close()
+                Params of the .wav file (!! use this with caution with processed waveform !!)
+                extracted with the wave python package.
+            """
+            print(wavefile.getparams())
 
-        assert self.wav_params == wav_params
-    # def __assert_wav_file(self)
-
-
-    
-    def get_waveform(self, block_length_s : float = None, stripe_length_s : float = None, mono : bool = True, sr : int = None) -> dict :
+        self.duration_s : float = self.wav_params.nframes / self.wav_params.framerate
         """
-            TODO
+            ### duration_s
+                float
+
+            Duration of the .wav file in seconds.
         """
+    # def __init__(self, filepath : str)
+
+
         
-        self.__assert_wav_file()
+    def get_waveform(self, mono : bool = True, sr : int = None) -> np.ndarray :
+        """
+            ## get_waveform
+
+            This method allows to extract the waveform of the .wav file.
+                It is also possible to convert the waveform into a mono channel format 
+                and change the framerate of the waveform
+
+            ### params : 
+                mono : bool (default value : True) - Convert the .wav
+                sr : int (nullable, default value : None) - new framerate of the waveform
+            ### returns :
+                np.ndarray - load and processed waveform
+        """
 
         wavefile = wave.open(self.filepath, 'r')
-        wav_params = wavefile.getparams()
         
         fconverter = lambda a : a
         if wavefile.getsampwidth() == 1:
@@ -77,15 +96,15 @@ class Wav :
             datatype = np.int16
             fconverter = lambda a : a / 32767.0
         else : 
-            "UNKOWN FORMAT ! TODO Throw exception !"
+            raise Exception("Unknown Wav file format.")
 
         # Read and convert to float array
-        frames = np.frombuffer(wavefile.readframes(wav_params.nframes), dtype = datatype)
+        frames = np.frombuffer(wavefile.readframes(self.wav_params.nframes), dtype = datatype)
         frames = fconverter(np.asarray(frames, dtype = np.float32))
 
-        if wav_params.nchannels > 1 :  
-            frames = np.array([frames[offset::wav_params.nchannels] for offset in range(wav_params.nchannels)])
-        
+        if self.wav_params.nchannels > 1 :  
+            frames = np.array([frames[offset::self.wav_params.nchannels] for offset in range(self.wav_params.nchannels)])
+
         # Multichannel (ex. Stereo) to Mono
         if mono is True :
             frames =  librosa.to_mono(frames)
@@ -94,113 +113,88 @@ class Wav :
         if sr is not None : 
             frames = librosa.resample(
                 frames, 
-                orig_sr = wav_params.framerate, 
+                orig_sr = self.wav_params.framerate, 
                 target_sr = sr
             )
         else : 
-            sr = wav_params.framerate
-
+            sr = self.wav_params.framerate
+        
         wavefile.close()
+        return frames
+    # def get_waveform(self, mono : bool = True, sr : int = None) -> np.ndarray
 
-        if block_length_s is not None : 
-            # No stripe
-            if stripe_length_s is None or stripe_length_s == 0 : 
-                return self.__get_block_waveform(
-                    frames,
-                    sr,
-                    block_length_s
-                )
-            # Stripped blocks
-            else : 
-                return self.__get_striped_block_waveform(
-                    frames,
-                    sr,
-                    block_length_s,
-                    stripe_length_s
-                )
+
+
+    def get_IPUs(self, waveform : np.ndarray, waveform_sr : int, silence_threshold : float = 0.008, ipu_threshold_s : float = .2, plot : bool = False) -> pd.DataFrame :
+        """
+            ## get_IPUs
+
+            ### params : 
+                waveform : np.ndarray - Waveform
+                waveform_sr : int - framerate of the waveform passed in params
+                silence_threshold : float - silence threshold (if energy > threshold : speech else silence)
+                ipu_threshold_s : float - minimum duration in seconds between 2 IPUs
+                plot : bool (optionnal, default value : False) - plot the waveform with the IPUs segments
+            ### return
+                pd.DataFrame - pandas DataFrame of the IPUs segments
+                columns : 
+                    "ipu_start_s" : start timestamp (in seconds) of the ipu
+                    "ipu_start_frame" : start frame of the ipu
+                    "ipu_end_s" : end timestamp (in seconds) of the ipu
+                    "ipu_end_frame" : start frame of the ipu
+        """
+
+        # Root Mean Square Energy
+        rms = librosa.feature.rms(y=waveform, frame_length=512)[0]
+        df : pd.DataFrame = pd.DataFrame(rms, columns=["rms"])
         
-        return frames 
-    # def get_waveform(self, block_length_s : float = None, stripe_length_s : float = None, mono : bool = True, sr : int = None) -> dict
+        # Times of each RMSE
+        times = np.append(librosa.times_like(rms, sr=waveform_sr), self.duration_s)
+        df["start_s"] = times[0:-1]
+        df["end_s"] = times[1:]
+        df["is_silence"] = df["rms"].lt(silence_threshold)
 
+        # Previous row (lag 1)
+        df[["prev_rms", "prev_is_silence"]] = df[["rms", "is_silence"]].shift(1).fillna(False)
 
+        # State transition dataframe (speech to silence) or (silence to speech)
+        state_transition_df : pd.DataFrame = df.loc[
+            ((df["prev_is_silence"] == False) & (df["is_silence"] == True)) | \
+            ((df['prev_is_silence'] == True) & (df['is_silence'] == False))
+        ].reset_index(drop=True)
 
-    def __get_block_waveform(self, waveform : np.array, sr : int, block_length_s : float) :
-        """
-            TODO
-        """
-        assert block_length_s > 0
-        assert sr > 0
+        list_silence_duration : list = []
+        for i in range(0,len(state_transition_df)-1) :
+            row = state_transition_df.iloc[i]
+            n_row = state_transition_df.iloc[i + 1]
 
-        nframes : int = waveform.shape[0]
-        duration_seconds : float = nframes / sr    
-        block_length_frame : int = time_to_frame(block_length_s, duration_seconds, nframes)
-        
-        start_block_frame : int = 0
-        while start_block_frame < nframes :
-
-            end_block_frame  = start_block_frame + block_length_frame
-
-            yield {
-                "start_block_frame" : start_block_frame,
-                "content" : waveform[start_block_frame:end_block_frame],
-                "end_block_frame" : end_block_frame,
-                "block_length" : end_block_frame - start_block_frame
-            }
-
-            start_block_frame = end_block_frame
-    # def __get_block_waveform(self, waveform : np.array, sr : int, block_length_s : float)
-
-
-
-    def __get_striped_block_waveform(self, waveform : np.array, sr : int, block_length_s : float, stripe_length_s : float) :
-        """
-            TODO
-        """
-
-        assert block_length_s > 0
-        assert stripe_length_s > 0
-        assert stripe_length_s <= block_length_s
-
-        nframes : int = waveform.shape[0]
-        duration_seconds : float = nframes / sr
+            if row["is_silence"] == False : continue
             
-        stripe_length_frame : int = time_to_frame(stripe_length_s, duration_seconds, nframes)
-        block_length_frame : int = time_to_frame(block_length_s, duration_seconds, nframes)
+            # Silence 
+            duration_silence : float = n_row["start_s"] - row["start_s"]
+            if duration_silence >= ipu_threshold_s or i == 0 :
+                list_silence_duration.append({
+                    "pause_start_s" : row["start_s"],
+                    "pause_end_s" : n_row["start_s"],
+                    "pause_duration_s" : duration_silence
+                })
 
-        start_block_frame : int = 0
-        while start_block_frame < nframes :
+        df_silence : pd.DataFrame = pd.DataFrame(list_silence_duration)
+        df_silence["pause_start_frame"] = librosa.time_to_samples(times=df_silence["pause_start_s"], sr=16_000)
+        df_silence["pause_end_frame"] = librosa.time_to_samples(times=df_silence["pause_end_s"], sr=16_000)
 
-            # Start
-            if start_block_frame == 0 :
-                start_frame = 0
-                is_stripe_left = False
-            else :
-                if start_block_frame - stripe_length_frame <= 0 :
-                    start_frame = 0
-                else : 
-                    start_frame = start_block_frame - stripe_length_frame
-                is_stripe_left = True
+        # Silence dataframe to IPU dataframe
+        df_ipu : pd.DataFrame = pd.DataFrame()
+        df_ipu["ipu_start_s"] = df_silence["pause_end_s"]
+        df_ipu["ipu_start_frame"] = df_silence["pause_end_frame"]
+        df_ipu["ipu_end_s"] = df_silence["pause_start_s"].shift(-1)
+        df_ipu["ipu_end_frame"] = df_silence["pause_start_frame"].shift(-1)
+        df_ipu.at[len(df_ipu) - 1, "ipu_end_frame"] = len(waveform)
+        df_ipu.at[len(df_ipu) - 1, "ipu_end_s"] = len(waveform) / 16000
 
-            # End
-            end : int = start_block_frame + block_length_frame + stripe_length_frame
-            end_frame : int = end if end <= nframes else nframes
-            is_stripe_right : bool = (end < nframes)
-            end_block_frame = start_block_frame + block_length_frame if is_stripe_right else end_frame
-
-            f = waveform[start_frame:end_frame]
-
-            yield {
-                "start_frame" : start_frame,
-                "is_stripe_left" : is_stripe_left,
-                "start_block_frame" : start_block_frame,
-                "content" : f,
-                "end_block_frame" : end_block_frame,
-                "end_frame" : end_frame,
-                "is_stripe_right" : is_stripe_right,
-                "block_length" : end_block_frame - start_block_frame
-            }
-
-            start_block_frame = end_block_frame
-    # def __get_striped_block_waveform(self, waveform : np.array, sr : int, block_length_s : float, stripe_length_s : float)
-
-# class Wav
+        if plot is True : 
+            plot_waveform_with_ipus(waveform, df_ipu)
+        
+        return df_ipu
+    # def get_IPUs(self, silence_threshold : float = 0.008, ipu_threshold_s : float = .2, plot : bool = False) -> pd.DataFrame 
+# class Wav(object)
