@@ -42,8 +42,6 @@ class Transcription(object) :
     def transcript_ipu(self, waveform : np.ndarray) -> list :
         """
             TODO
-            TODO list to pd.DataFrame
-            ipu_offset_s not use if align = False
         """
 
         speech_features = self.processor(
