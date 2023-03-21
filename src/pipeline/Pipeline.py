@@ -1,39 +1,62 @@
 # External Imports
 import pandas as pd
 import numpy as np
+
 import time
+
 import os
 
 # Internal Imports
 from src.audio import Wav
-from src.transcription import Transcription
 from src.audio.utils import is_file_wav
-from .utils import save_to_sppas_format
+
+from src.transcription import Transcription
+
+from src.pipeline.utils import save_to_sppas_format
+
 
 
 class Pipeline(object) :
     """
-        TODO
+        # Pipeline
+
+        This class allows the transcription of a wav file in 2 steps:
+            - IPUs segmentation
+            - For each IPU : transcription
+            - save transcription in sppas csv format
+
+        It is possible to transcribe several wav files at once by using the transcript_batch method.
     """
 
     def __init__(self, transcription_model_name : str) :
         """
-            TODO
+            ## __init__
+
+            ### params :
+                transcription_model_name : str - Huggingface name of the ASR model (wav2vec2 with LM)
+                ex : "bofenghuang/asr-wav2vec2-ctc-french"
         """
 
         self.__transcription : Transcription = Transcription(transcription_model_name) 
-        """
-            TODO
-        """
     # def __init__(self, wav_path : str, transcription_model_name : str)
 
 
 
     def transcript_wav_file_with_ipu_segmentation(self, wav_path : str, plot_ipus : bool = False,
-        save_sppas : bool = False, save_sppas_path : str = None) -> list : 
+        save_sppas : bool = False, save_sppas_path : str = None) -> pd.DataFrame : 
         """
-            TODO
-            return pandas df or better data struct than a simple list of dict
+            ## transcript_wav_file_with_ipu_segmentation
+
+            this method allows the IPU segmentation and transcription of a wav file.
+
+            ### params :
+                wav_path : str - Wav path 
+                plot_ipus : bool - if True : plot the waveform with the IPUs segmentations
+                save_sppas : bool - save the transcription in a Sppas readable csv file
+                save_sppas_path : str - repository to save the Sppas readable csv file (not used if save_sppas is set to False)
+
+            ### returns :
+                pd.DataFrame
         """
 
         self.set_wav_file(wav_path)
@@ -46,7 +69,6 @@ class Pipeline(object) :
         )
         print("time get waveform : ", time.time() - baseT, " seconds")
 
-
         print("get IPUS")
         baseT = time.time()
         df_ipu : pd.DataFrame = self.__wav.get_IPUs(
@@ -55,7 +77,6 @@ class Pipeline(object) :
             plot=plot_ipus
         )
         print("time get IPUS : ", time.time() - baseT, " seconds")
-
 
         list_result : list = list()
 
@@ -87,7 +108,14 @@ class Pipeline(object) :
     def transcript_batch(self, wav_repository_path : str, plot_ipus : bool = False,
         save_sppas : bool = False, save_sppas_path : str = None) :
         """
-            TODO
+            ## transcript_batch
+
+            ### params :
+                wav_repository_path : str - repository path of the wav files
+                plot_ipus : bool - if True : plot the waveform with the IPUs segmentations for each wav file in wav_repository_path
+                save_sppas : bool - save the transcription results for each wav file in wav_repository_path
+                save_sppas_path : str - repository to save the Sppas readable csv files (not used if save_sppas is set to False)
+
         """
 
         for file in os.listdir(wav_repository_path):
@@ -106,13 +134,18 @@ class Pipeline(object) :
 
 
 
-    def set_wav_file(self, wav_path : str) :
+    def set_wav_file(self, wav_path : str) -> None :
         """
-            TODO
+            ## set_wav_file
+
+            __wav private attribute setter
+
+            ### params :
+                wav_path : str - path of the wav file
         """
 
         self.__wav = Wav(wav_path)
-    # def set_wav_file(self, wav_path : str)
+    # def set_wav_file(self, wav_path : str) -> None
 
     
 # class Pipeline(class)

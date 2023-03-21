@@ -1,9 +1,12 @@
 # External Imports
 import torch
+
+from transformers.utils import logging
 from transformers import (
-    Wav2Vec2Processor,
+    Wav2Vec2ProcessorWithLM,
     Wav2Vec2ForCTC
 )
+
 import numpy as np
 
 
@@ -11,26 +14,24 @@ import numpy as np
 class Transcription(object) :
     """
         # Transcription
-
-        Alignment References :
-            https://github.com/huggingface/transformers/blob/main/examples/research_projects/wav2vec2/alignment.py
-            https://pytorch.org/audio/stable/tutorials/forced_alignment_tutorial.html
     """
 
 
 
-    def __init__(self, model_name : str) :
+    def __init__(self, model_name : str = "bofenghuang/asr-wav2vec2-ctc-french") :
         """
-            @constructor
+            ## __init__
 
-            @param : model_name
-                HuggingFace Model ID. Default is : bofenghuang/asr-wav2vec2-ctc-french
-                From https://huggingface.co/bofenghuang/asr-wav2vec2-ctc-french
+            ### params : 
+                model_name : str
+                    HuggingFace Model ID. Default is : bofenghuang/asr-wav2vec2-ctc-french
+                    From https://huggingface.co/bofenghuang/asr-wav2vec2-ctc-french
         """
 
         print(f"Loading Models : {model_name}")
         self.model = Wav2Vec2ForCTC.from_pretrained(model_name)
-        self.processor = Wav2Vec2Processor.from_pretrained(model_name)
+        self.processor = Wav2Vec2ProcessorWithLM.from_pretrained(model_name)
+        logging.set_verbosity_error()
 
         # If Cuda is available
         self.device_available = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -39,9 +40,16 @@ class Transcription(object) :
 
 
 
-    def transcript_ipu(self, waveform : np.ndarray) -> list :
+    def transcript_ipu(self, waveform : np.ndarray) -> str :
         """
-            TODO
+            ## transcript_ipu
+
+            This method allows to transcript an IPU waveform.
+
+            ### params :
+                waveform : np.ndarray - IPU waveform
+            ### return :
+                str - IPU's transcript
         """
 
         speech_features = self.processor(
@@ -49,16 +57,14 @@ class Transcription(object) :
             sampling_rate = 16_000,
             return_tensors = "pt",
             padding=True
-        )
+        )   
 
         with torch.inference_mode():
-            logits = self.model(**speech_features).logits
+            logits = self.model(speech_features.input_values).logits
 
-        predicted_ids = torch.argmax(logits, dim=-1)
-        
-        outputs = self.processor.batch_decode(predicted_ids)
+        outputs = self.processor.batch_decode(logits.numpy()).text[0]
 
-        return outputs[0] if len(outputs[0]) > 0 else None
+        return outputs if len(outputs) > 0 else None
     # def transcript_ipu(self, waveform : np.array, align : bool = True, ipu_offset_s : float = 0)
 # class Transcription(object)
 

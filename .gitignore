@@ -1,6 +1,5 @@
 tests/
 *.pyc
 __pycache__/
-Output/
 Results/
-temp/
+Results_lm/
